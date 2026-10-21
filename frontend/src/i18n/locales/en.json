@@ -1,0 +1,79 @@
+{
+  "app": {
+    "name": "Nexora",
+    "tagline": "Smart Residential Community Management",
+    "demo_mode": "Demo Mode Active"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "complaints": "Complaints & Maintenance",
+    "slas": "SLA & Escalations",
+    "dues": "Maintenance Dues",
+    "visitors": "Visitor Management",
+    "parking": "Parking Allocations",
+    "facilities": "Facility Bookings",
+    "notices": "Notice Board",
+    "directory": "Resident Directory",
+    "analytics": "Analytics & Reports",
+    "settings": "Settings",
+    "logout": "Sign Out"
+  },
+  "roles": {
+    "resident": "Resident",
+    "admin": "Association Admin",
+    "worker": "Maintenance Worker",
+    "security": "Security Staff"
+  },
+  "common": {
+    "welcome": "Welcome back",
+    "community": "Community",
+    "switch_role": "Switch Demo Role",
+    "language": "Language",
+    "status": "Status",
+    "priority": "Priority",
+    "action": "Action",
+    "view_all": "View All",
+    "create": "Create",
+    "submit": "Submit",
+    "cancel": "Cancel",
+    "save": "Save Changes",
+    "search": "Search...",
+    "filter": "Filter",
+    "export": "Export CSV",
+    "loading": "Loading data...",
+    "no_data": "No records found.",
+    "active": "Active",
+    "overdue": "Overdue"
+  },
+  "complaints": {
+    "title": "Complaints & Maintenance",
+    "new_complaint": "File a Complaint",
+    "open_issues": "Open Issues",
+    "in_progress": "In Progress",
+    "resolved": "Resolved",
+    "closed": "Closed",
+    "reopened": "Reopened",
+    "urgent": "Urgent",
+    "high": "High",
+    "medium": "Medium",
+    "low": "Low",
+    "ml_category_hint": "ML Category Suggestion",
+    "ml_duplicate_alert": "Potential Duplicate Warning",
+    "ai_suggest": "Get AI Category Suggestion",
+    "assigned_to": "Assigned Worker"
+  },
+  "dues": {
+    "title": "Maintenance Dues & Finance",
+    "total_due": "Total Outstanding Dues",
+    "paid_this_month": "Collected This Month",
+    "record_payment": "Record Payment (Manual/Mock)",
+    "receipt": "View Receipt"
+  },
+  "visitors": {
+    "title": "Visitor Passes & Security Gate",
+    "create_pass": "Create Visitor Pass",
+    "scan_qr": "Simulate QR Scan",
+    "expected_visitors": "Expected Today",
+    "checked_in": "Currently Inside"
+  }
+}

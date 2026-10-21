@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Environment Variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Production Builds
+dist/
+build/
+
+# Database
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+dev.db
+
+# Python & ML
+.venv/
+venv/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+*.joblib
+*.pkl
+
+# Uploads & Temp
+uploads/
+scratch/
+*.log
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
