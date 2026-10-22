@@ -11,12 +11,14 @@ import { ParkingPage } from './features/parking/ParkingPage';
 import { NoticesPage } from './features/notices/NoticesPage';
 import { DirectoryPage } from './features/directory/DirectoryPage';
 import { AnalyticsPage } from './features/analytics/AnalyticsPage';
+import { LeasesPage } from './features/leases/LeasesPage';
 
 export default function App() {
   return (
     <Routes>
       <Route element={<AppLayout />}>
         <Route path="/" element={<DashboardRouter />} />
+        <Route path="/leases" element={<LeasesPage />} />
         <Route path="/complaints" element={<ComplaintsPage />} />
         <Route path="/slas" element={<SlasPage />} />
         <Route path="/dues" element={<DuesPage />} />

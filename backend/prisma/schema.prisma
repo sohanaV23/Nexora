@@ -1,0 +1,339 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// -------------------------------------------------------------
+// 1. CORE AUTH & MULTI-COMMUNITY SCOPE
+// -------------------------------------------------------------
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  phone        String?
+  role         String   @default("RESIDENT") // SUPER_ADMIN, ASSOCIATION_ADMIN, RESIDENT, WORKER, SECURITY
+  status       String   @default("ACTIVE")   // ACTIVE, SUSPENDED
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships       CommunityMembership[]
+  tenanciesAsTenant Tenancy[]             @relation("TenantTenancies")
+  tenanciesAsOwner  Tenancy[]             @relation("OwnerTenancies")
+  invoicesPayable   Invoice[]             @relation("PayerInvoices")
+  paymentsReported  Payment[]             @relation("ReportedPayments")
+  paymentsVerified  Payment[]             @relation("VerifiedPayments")
+  complaintsFiled   Complaint[]           @relation("ReporterComplaints")
+  complaintsWorker  Complaint[]           @relation("WorkerComplaints")
+  facilityBookings  FacilityBooking[]
+  auditLogs         AuditLog[]
+}
+
+model Community {
+  id        String   @id @default(uuid())
+  name      String
+  code      String   @unique // e.g. "GWH", "CTR"
+  address   String
+  city      String   @default("Hyderabad")
+  status    String   @default("ACTIVE") // ACTIVE, SUSPENDED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships  CommunityMembership[]
+  buildings    Building[]
+  flats        Flat[]
+  invoices     Invoice[]
+  complaints   Complaint[]
+  expenses     Expense[]
+  visitorPasses VisitorPass[]
+  facilities   Facility[]
+  parkingSlots ParkingSlot[]
+  notices      Notice[]
+  auditLogs    AuditLog[]
+}
+
+model CommunityMembership {
+  id              String   @id @default(uuid())
+  userId          String
+  communityId     String
+  role            String   // ASSOCIATION_ADMIN, RESIDENT, WORKER, SECURITY
+  unitDesignation String?  // e.g. "Flat B-402 Owner", "Society Secretary", "Gate 1 Guard"
+  status          String   @default("ACTIVE")
+  createdAt       DateTime @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, communityId, role])
+}
+
+// -------------------------------------------------------------
+// 2. BUILDINGS, FLATS & TENANCY LIFECYCLE
+// -------------------------------------------------------------
+
+model Building {
+  id          String   @id @default(uuid())
+  communityId String
+  name        String   // "Tower A", "Tower B"
+  totalFloors Int      @default(10)
+  createdAt   DateTime @default(now())
+
+  community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  flats     Flat[]
+}
+
+model Flat {
+  id              String   @id @default(uuid())
+  communityId     String
+  buildingId      String
+  flatNumber      String   // "Flat 402"
+  floor           Int      @default(4)
+  bhkType         String   @default("3 BHK")
+  occupancyStatus String   @default("OWNER_OCCUPIED") // OWNER_OCCUPIED, TENANT_OCCUPIED, VACANT
+  ownerName       String?
+  createdAt       DateTime @default(now())
+
+  community    Community     @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  building     Building      @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  tenancies    Tenancy[]
+  invoices     Invoice[]
+  complaints   Complaint[]
+  visitorPasses VisitorPass[]
+  parkingSlots ParkingSlot[]
+}
+
+model Tenancy {
+  id                   String    @id @default(uuid())
+  flatId               String
+  tenantId             String
+  landlordId           String
+  leaseStart           DateTime
+  leaseEnd             DateTime
+  monthlyRentPaise     Int       // e.g. 2500000 = ₹25,000.00
+  securityDepositPaise Int       // e.g. 5000000 = ₹50,000.00
+  dueDay               Int       @default(5)
+  noticePeriodDays     Int       @default(30)
+  status               String    @default("ACTIVE") // ACTIVE, EXPIRING, RENEWED, TERMINATED, CLOSED
+  moveInNotes          String?
+  moveOutDate          DateTime?
+  moveOutInspection    String?
+  depositRefundPaise   Int       @default(0)
+  depositDeductionsPaise Int     @default(0)
+  depositDeductionReason String?
+  depositStatus        String    @default("HELD") // HELD, PARTIALLY_REFUNDED, FULLY_REFUNDED, SETTLED
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  flat     Flat      @relation(fields: [flatId], references: [id], onDelete: Cascade)
+  tenant   User      @relation("TenantTenancies", fields: [tenantId], references: [id])
+  landlord User      @relation("OwnerTenancies", fields: [landlordId], references: [id])
+  invoices Invoice[]
+}
+
+// -------------------------------------------------------------
+// 3. DUAL-LEDGER INVOICES & PAYMENTS
+// -------------------------------------------------------------
+
+model Invoice {
+  id            String   @id @default(uuid())
+  invoiceNumber String   @unique // e.g. "INV-MNT-2026-001", "INV-RNT-2026-001"
+  communityId   String
+  flatId        String
+  tenancyId     String?
+  payerId       String
+  invoiceType   String   // "ASSOCIATION_MAINTENANCE" vs "CONTRACTUAL_RENT" vs "UTILITY"
+  billingPeriod String   // "October 2026"
+  amountPaise   Int
+  paidPaise     Int      @default(0)
+  balancePaise  Int
+  creditsPaise  Int      @default(0)
+  dueDate       DateTime
+  status        String   @default("ISSUED") // DRAFT, ISSUED, PARTIALLY_PAID, PAID, OVERDUE, CANCELLED
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  flat      Flat      @relation(fields: [flatId], references: [id], onDelete: Cascade)
+  tenancy   Tenancy?  @relation(fields: [tenancyId], references: [id], onDelete: SetNull)
+  payer     User      @relation("PayerInvoices", fields: [payerId], references: [id])
+  payments  Payment[]
+}
+
+model Payment {
+  id                   String    @id @default(uuid())
+  invoiceId            String
+  amountPaise          Int
+  paymentMethod        String    // CASH, BANK_TRANSFER, OUTSIDE_UPI, CHEQUE, SIMULATED_DEMO
+  transactionReference String?
+  isSimulated          Boolean   @default(false)
+  status               String    @default("PENDING_VERIFICATION") // PENDING_VERIFICATION, VERIFIED, REJECTED, REVERSED
+  reportedAt           DateTime  @default(now())
+  reportedById         String
+  verifiedAt           DateTime?
+  verifiedById         String?
+  rejectionReason      String?
+  receiptNumber        String?   // "RCP-2026-1042"
+  proofNotes           String?
+
+  invoice    Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  reportedBy User    @relation("ReportedPayments", fields: [reportedById], references: [id])
+  verifiedBy User?   @relation("VerifiedPayments", fields: [verifiedById], references: [id])
+}
+
+model Expense {
+  id           String   @id @default(uuid())
+  communityId  String
+  title        String
+  category     String   // ELECTRICAL, PLUMBING, ELEVATOR_AMC, SECURITY, CLEANING, GARDENING
+  amountPaise  Int
+  vendorName   String
+  invoiceRef   String?
+  expenseDate  DateTime
+  status       String   @default("APPROVED") // SUBMITTED, APPROVED, REJECTED, PAID
+  approvedById String?
+  createdAt    DateTime @default(now())
+
+  community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+}
+
+// -------------------------------------------------------------
+// 4. APARTMENT MAINTENANCE & COMPLAINTS
+// -------------------------------------------------------------
+
+model Complaint {
+  id                   String   @id @default(uuid())
+  complaintNumber      String   @unique // "CMP-2026-001"
+  communityId          String
+  flatId               String
+  reporterId           String
+  assignedWorkerId     String?
+  category             String   // Plumbing & Water, Electrical, Elevator & Lift, Cleaning & Waste, etc.
+  title                String
+  description          String
+  location             String
+  priority             String   @default("MEDIUM") // LOW, MEDIUM, HIGH, URGENT
+  status               String   @default("SUBMITTED") // SUBMITTED, ACKNOWLEDGED, ASSIGNED, IN_PROGRESS, RESOLVED, CLOSED, REOPENED, REJECTED
+  slaTargetHours       Int      @default(24)
+  isOverdue            Boolean  @default(false)
+  confidenceScore      Float?
+  mlSuggestedCategory  String?
+  duplicateWarningRef  String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  community      Community           @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  flat           Flat                @relation(fields: [flatId], references: [id], onDelete: Cascade)
+  reporter       User                @relation("ReporterComplaints", fields: [reporterId], references: [id])
+  assignedWorker User?               @relation("WorkerComplaints", fields: [assignedWorkerId], references: [id])
+  timeline       ComplaintTimeline[]
+}
+
+model ComplaintTimeline {
+  id          String   @id @default(uuid())
+  complaintId String
+  actorId     String?
+  fromStatus  String
+  toStatus    String
+  note        String
+  createdAt   DateTime @default(now())
+
+  complaint Complaint @relation(fields: [complaintId], references: [id], onDelete: Cascade)
+}
+
+// -------------------------------------------------------------
+// 5. GATE SECURITY, FACILITIES, PARKING & NOTICES
+// -------------------------------------------------------------
+
+model VisitorPass {
+  id          String   @id @default(uuid())
+  passCode    String   @unique // "NX-8942"
+  communityId String
+  flatId      String
+  visitorName String
+  phone       String
+  purpose     String   // GUEST, DELIVERY, CAB, SERVICE
+  expectedDate String
+  expectedTime String
+  validUntil  DateTime
+  status      String   @default("APPROVED") // APPROVED, CHECKED_IN, DEPARTED, REVOKED, EXPIRED
+  entryTime   String?
+  exitTime    String?
+  createdAt   DateTime @default(now())
+
+  community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  flat      Flat      @relation(fields: [flatId], references: [id], onDelete: Cascade)
+}
+
+model Facility {
+  id               String   @id @default(uuid())
+  communityId      String
+  name             String
+  capacity         Int
+  ratePerHourPaise Int      @default(0)
+  status           String   @default("AVAILABLE") // AVAILABLE, MAINTENANCE
+  createdAt        DateTime @default(now())
+
+  community Community         @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  bookings  FacilityBooking[]
+}
+
+model FacilityBooking {
+  id          String   @id @default(uuid())
+  facilityId  String
+  bookedById  String
+  bookingDate String   // "2026-10-25"
+  startTime   String   // "10:00 AM"
+  endTime     String   // "01:00 PM"
+  purpose     String
+  status      String   @default("CONFIRMED") // CONFIRMED, CANCELLED
+  createdAt   DateTime @default(now())
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  bookedBy User     @relation(fields: [bookedById], references: [id])
+}
+
+model Notice {
+  id          String    @id @default(uuid())
+  communityId String
+  title       String
+  content     String
+  category    String    // MAINTENANCE, EVENT, SECURITY, GENERAL
+  audience    String    @default("ALL_RESIDENTS")
+  publishedAt DateTime  @default(now())
+  expiresAt   DateTime?
+  isImportant Boolean   @default(false)
+
+  community Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+}
+
+model ParkingSlot {
+  id              String   @id @default(uuid())
+  communityId     String
+  slotNumber      String   // "P-402"
+  tower           String   // "Tower B"
+  level           String   // "Basement 1"
+  vehicleType     String   // "4-Wheeler", "2-Wheeler"
+  allocatedFlatId String?
+  status          String   @default("ALLOCATED") // ALLOCATED, AVAILABLE
+
+  community     Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  allocatedFlat Flat?     @relation(fields: [allocatedFlatId], references: [id], onDelete: SetNull)
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  communityId String?
+  actorId     String?
+  action      String   // "PAYMENT_VERIFIED", "TENANCY_MOVE_OUT", "COMMUNITY_CREATED", "ROLE_UPDATED"
+  resource    String
+  details     String
+  timestamp   DateTime @default(now())
+
+  community Community? @relation(fields: [communityId], references: [id], onDelete: Cascade)
+  actor     User?      @relation(fields: [actorId], references: [id], onDelete: SetNull)
+}

@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next';
 import { 
   LayoutDashboard, 
   AlertCircle, 
-  FileText, 
   Clock, 
   CreditCard, 
   Users, 
@@ -14,7 +13,10 @@ import {
   BarChart3, 
   ShieldCheck, 
   Wrench,
-  Sparkles
+  Sparkles,
+  Key,
+  Crown,
+  Activity
 } from 'lucide-react';
 import { useDemoAuth } from '../../context/DemoAuthContext';
 import clsx from 'clsx';
@@ -25,16 +27,17 @@ export const Sidebar = ({ isOpen, onClose }) => {
 
   // Role-appropriate navigation items
   const navItems = [
-    { to: '/', label: t('nav.dashboard'), icon: LayoutDashboard, roles: ['resident', 'admin', 'worker', 'security'] },
-    { to: '/complaints', label: t('nav.complaints'), icon: AlertCircle, roles: ['resident', 'admin', 'worker'] },
-    { to: '/slas', label: t('nav.slas'), icon: Clock, roles: ['admin'] },
-    { to: '/dues', label: t('nav.dues'), icon: CreditCard, roles: ['resident', 'admin'] },
-    { to: '/visitors', label: t('nav.visitors'), icon: ShieldCheck, roles: ['resident', 'admin', 'security'] },
-    { to: '/parking', label: t('nav.parking'), icon: Car, roles: ['resident', 'admin'] },
-    { to: '/facilities', label: t('nav.facilities'), icon: Building2, roles: ['resident', 'admin'] },
-    { to: '/notices', label: t('nav.notices'), icon: Bell, roles: ['resident', 'admin', 'worker', 'security'] },
-    { to: '/directory', label: t('nav.directory'), icon: Users, roles: ['resident', 'admin'] },
-    { to: '/analytics', label: t('nav.analytics'), icon: BarChart3, roles: ['admin'] }
+    { to: '/', label: t('nav.dashboard'), icon: LayoutDashboard, roles: ['resident', 'tenant', 'landlord', 'admin', 'worker', 'security', 'super_admin'] },
+    { to: '/leases', label: 'Tenancies & Leases', icon: Key, roles: ['tenant', 'landlord', 'admin', 'super_admin'] },
+    { to: '/complaints', label: t('nav.complaints'), icon: AlertCircle, roles: ['resident', 'tenant', 'landlord', 'admin', 'worker', 'super_admin'] },
+    { to: '/slas', label: t('nav.slas'), icon: Clock, roles: ['admin', 'super_admin'] },
+    { to: '/dues', label: 'Billing & Verification', icon: CreditCard, roles: ['resident', 'tenant', 'landlord', 'admin', 'super_admin'] },
+    { to: '/visitors', label: t('nav.visitors'), icon: ShieldCheck, roles: ['resident', 'tenant', 'admin', 'security', 'super_admin'] },
+    { to: '/parking', label: t('nav.parking'), icon: Car, roles: ['resident', 'admin', 'super_admin'] },
+    { to: '/facilities', label: t('nav.facilities'), icon: Building2, roles: ['resident', 'tenant', 'admin', 'super_admin'] },
+    { to: '/notices', label: t('nav.notices'), icon: Bell, roles: ['resident', 'tenant', 'landlord', 'admin', 'worker', 'security', 'super_admin'] },
+    { to: '/directory', label: t('nav.directory'), icon: Users, roles: ['resident', 'tenant', 'admin', 'super_admin'] },
+    { to: '/analytics', label: t('nav.analytics'), icon: BarChart3, roles: ['admin', 'super_admin'] }
   ];
 
   const visibleItems = navItems.filter(item => item.roles.includes(currentRole));
@@ -63,18 +66,30 @@ export const Sidebar = ({ isOpen, onClose }) => {
           </div>
           <div>
             <h1 className="text-lg font-bold text-white tracking-tight leading-none">Nexora</h1>
-            <span className="text-[10px] font-medium text-indigo-400 uppercase tracking-widest">Smart Living</span>
+            <span className="text-[10px] font-medium text-indigo-400 uppercase tracking-widest">Platform 2026</span>
           </div>
         </div>
 
         {/* Community Scope Badge */}
         <div className="px-4 py-3 border-b border-slate-800/50 bg-slate-950/40">
           <div className="flex items-center gap-2 text-xs">
-            <Building2 className="w-4 h-4 text-slate-400 shrink-0" />
-            <div className="truncate">
-              <p className="text-[10px] text-slate-400 uppercase font-semibold">Active Community</p>
-              <p className="font-medium text-slate-200 truncate">{currentCommunity.name}</p>
-            </div>
+            {currentRole === 'super_admin' ? (
+              <>
+                <Crown className="w-4 h-4 text-amber-400 shrink-0" />
+                <div className="truncate">
+                  <p className="text-[10px] text-amber-400 uppercase font-semibold">Scope</p>
+                  <p className="font-bold text-slate-200 truncate">Platform Super Admin</p>
+                </div>
+              </>
+            ) : (
+              <>
+                <Building2 className="w-4 h-4 text-slate-400 shrink-0" />
+                <div className="truncate">
+                  <p className="text-[10px] text-slate-400 uppercase font-semibold">Active Community</p>
+                  <p className="font-medium text-slate-200 truncate">{currentCommunity?.name || 'Greenwood Heights'}</p>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -108,8 +123,8 @@ export const Sidebar = ({ isOpen, onClose }) => {
               {currentRole.slice(0, 2)}
             </div>
             <div className="truncate flex-1">
-              <p className="text-xs font-semibold text-slate-200 capitalize">{t(`roles.${currentRole}`)}</p>
-              <p className="text-[11px] text-slate-400 truncate">Role Scoped View</p>
+              <p className="text-xs font-semibold text-slate-200 capitalize">{currentRole.replace('_', ' ')}</p>
+              <p className="text-[11px] text-slate-400 truncate">Server Verified Session</p>
             </div>
           </div>
         </div>

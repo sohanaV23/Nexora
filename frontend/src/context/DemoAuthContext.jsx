@@ -1,71 +1,110 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { api } from '../services/api';
 
 const DemoAuthContext = createContext(null);
 
 export const DEMO_COMMUNITIES = [
-  { id: 'comm-1', name: 'Greenwood Heights', code: 'GWH', address: 'Plot 42, Financial District, Hyderabad' },
-  { id: 'comm-2', name: 'Cyber Towers Residency', code: 'CTR', address: 'Madhapur Main Road, HITEC City, Hyderabad' }
+  { id: 'comm-1', name: 'Greenwood Heights', code: 'GWH', address: 'Plot 42, Financial District, Gachibowli' },
+  { id: 'comm-2', name: 'Cyber Towers Residency', code: 'CTR', address: 'Madhapur Main Road, HITEC City' }
 ];
 
-export const DEMO_USERS = {
-  resident: {
-    id: 'user-res-1',
-    name: 'Rohit Sharma',
-    role: 'resident',
-    email: 'rohit.resident@nexora.local',
-    flat: 'Tower B - Flat 402',
-    phone: '+91 98765 43210'
-  },
-  admin: {
-    id: 'user-adm-1',
-    name: 'Ananya Rao',
-    role: 'admin',
-    email: 'ananya.admin@nexora.local',
-    designation: 'Society Secretary',
-    phone: '+91 98765 11111'
-  },
-  worker: {
-    id: 'user-wrk-1',
-    name: 'Suresh Kumar',
-    role: 'worker',
-    email: 'suresh.maintenance@nexora.local',
-    specialization: 'Senior Electrician & Plumbing Specialist',
-    phone: '+91 98765 22222'
-  },
-  security: {
-    id: 'user-sec-1',
-    name: 'Ramesh Singh',
-    role: 'security',
-    email: 'ramesh.gate@nexora.local',
-    post: 'Main Gate 1 Guardhouse',
-    phone: '+91 98765 33333'
-  }
-};
+export const AVAILABLE_ROLES = [
+  { key: 'resident', label: 'Resident (Owner)', icon: 'User' },
+  { key: 'tenant', label: 'Resident (Tenant)', icon: 'Home' },
+  { key: 'landlord', label: 'Landlord / Owner', icon: 'Key' },
+  { key: 'admin', label: 'Association Admin', icon: 'Shield' },
+  { key: 'worker', label: 'Maintenance Worker', icon: 'Wrench' },
+  { key: 'security', label: 'Security Staff', icon: 'UserCheck' },
+  { key: 'super_admin', label: 'Nexora Super Admin', icon: 'Crown' }
+];
 
 export const DemoAuthProvider = ({ children }) => {
   const { i18n } = useTranslation();
-  const [currentRole, setCurrentRole] = useState(() => localStorage.getItem('nexora_demo_role') || 'resident');
-  const [currentCommunity, setCurrentCommunity] = useState(() => {
-    const saved = localStorage.getItem('nexora_demo_community');
-    return saved ? JSON.parse(saved) : DEMO_COMMUNITIES[0];
-  });
+  const [currentUser, setCurrentUser] = useState(null);
+  const [currentRole, setCurrentRole] = useState('resident');
+  const [currentCommunity, setCurrentCommunity] = useState(DEMO_COMMUNITIES[0]);
   const [currentLanguage, setCurrentLanguage] = useState(() => localStorage.getItem('i18nextLng') || 'en');
+  const [communities, setCommunities] = useState(DEMO_COMMUNITIES);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const currentUser = DEMO_USERS[currentRole] || DEMO_USERS.resident;
+  // Load user session on mount
+  useEffect(() => {
+    async function initAuth() {
+      try {
+        const res = await api.getMe();
+        if (res.success && res.data.user) {
+          setCurrentUser(res.data.user);
+          const roleKey = res.data.user.role.toLowerCase();
+          setCurrentRole(roleKey);
+          if (res.data.user.activeCommunity) {
+            setCurrentCommunity(res.data.user.activeCommunity);
+          }
+        }
+      } catch (err) {
+        // Fall back to resident demo login
+        try {
+          const demoRes = await api.demoLogin('resident');
+          if (demoRes.success && demoRes.data.user) {
+            setCurrentUser(demoRes.data.user);
+            setCurrentRole('resident');
+            if (demoRes.data.user.activeCommunity) {
+              setCurrentCommunity(demoRes.data.user.activeCommunity);
+            }
+          }
+        } catch (e) {
+          console.error('Failed to init demo session:', e);
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    initAuth();
+  }, []);
 
-  const switchRole = (role) => {
-    if (DEMO_USERS[role]) {
-      setCurrentRole(role);
-      localStorage.setItem('nexora_demo_role', role);
+  // Fetch communities list
+  useEffect(() => {
+    async function loadCommunities() {
+      try {
+        const res = await api.getCommunities();
+        if (res.success && res.data.communities.length > 0) {
+          setCommunities(res.data.communities);
+        }
+      } catch (e) {
+        // Keep fallback
+      }
+    }
+    if (currentUser) {
+      loadCommunities();
+    }
+  }, [currentUser]);
+
+  const switchRole = async (roleKey) => {
+    setIsLoading(true);
+    try {
+      const res = await api.demoLogin(roleKey);
+      if (res.success && res.data.user) {
+        setCurrentUser(res.data.user);
+        setCurrentRole(roleKey);
+        if (res.data.user.activeCommunity) {
+          setCurrentCommunity(res.data.user.activeCommunity);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to switch role:', err);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const switchCommunity = (commId) => {
-    const found = DEMO_COMMUNITIES.find(c => c.id === commId);
-    if (found) {
-      setCurrentCommunity(found);
-      localStorage.setItem('nexora_demo_community', JSON.stringify(found));
+  const switchCommunity = async (commId) => {
+    try {
+      const res = await api.switchCommunity(commId);
+      if (res.success && res.data.activeCommunity) {
+        setCurrentCommunity(res.data.activeCommunity);
+      }
+    } catch (err) {
+      console.error('Failed to switch community:', err);
     }
   };
 
@@ -77,15 +116,16 @@ export const DemoAuthProvider = ({ children }) => {
 
   return (
     <DemoAuthContext.Provider value={{
+      currentUser: currentUser || { name: 'Loading...', role: currentRole },
       currentRole,
-      currentUser,
       currentCommunity,
       currentLanguage,
+      communities,
+      availableRoles: AVAILABLE_ROLES,
+      isLoading,
       switchRole,
       switchCommunity,
-      switchLanguage,
-      communities: DEMO_COMMUNITIES,
-      availableRoles: Object.keys(DEMO_USERS)
+      switchLanguage
     }}>
       {children}
     </DemoAuthContext.Provider>
