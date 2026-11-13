@@ -75,6 +75,7 @@ router.post('/facilities/:facilityId/book', facilityCtrl.bookFacility);
 
 // Parking & Notices
 router.get('/parking', parkingCtrl.getParkingSlots);
+router.post('/parking/:id/allocate', requireRole(['SUPER_ADMIN', 'ASSOCIATION_ADMIN']), parkingCtrl.allocateParkingSlot);
 router.get('/notices', noticeCtrl.getNotices);
 router.post('/notices', requireRole(['SUPER_ADMIN', 'ASSOCIATION_ADMIN']), noticeCtrl.publishNotice);
 

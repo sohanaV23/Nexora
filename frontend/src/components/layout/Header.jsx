@@ -15,7 +15,8 @@ import {
   Home,
   Sparkles,
   Lock,
-  AlertCircle
+  AlertCircle,
+  LogOut
 } from 'lucide-react';
 import { useDemoAuth } from '../../context/DemoAuthContext';
 import { Modal } from '../ui/Modal';
@@ -32,7 +33,8 @@ export const Header = ({ onOpenSidebar }) => {
     switchCommunity, 
     switchLanguage,
     communities,
-    availableRoles 
+    availableRoles,
+    logout
   } = useDemoAuth();
 
   const [roleMenuOpen, setRoleMenuOpen] = useState(false);
@@ -216,7 +218,7 @@ export const Header = ({ onOpenSidebar }) => {
             )}
           </div>
 
-          {/* User Mini Card */}
+          {/* User Mini Card & Sign Out */}
           <div className="hidden md:flex items-center gap-2 pl-2 border-l border-slate-200">
             <div className="w-8 h-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-xs font-bold text-slate-700">
               {currentUser?.name?.charAt(0) || 'U'}
@@ -225,6 +227,13 @@ export const Header = ({ onOpenSidebar }) => {
               <p className="font-semibold text-slate-800">{currentUser?.name}</p>
               <p className="text-[11px] text-slate-500 capitalize">{currentRole.replace('_', ' ')}</p>
             </div>
+            <button
+              onClick={() => logout()}
+              className="ml-1 p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+              title="Sign Out to Role Portal"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </header>

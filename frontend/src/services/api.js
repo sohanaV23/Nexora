@@ -69,6 +69,10 @@ export const api = {
   getNotices: () => apiRequest('/notices'),
   publishNotice: (data) => apiRequest('/notices', { method: 'POST', body: JSON.stringify(data) }),
 
+  // Parking
+  getParkingSlots: (communityId) => apiRequest(`/parking${communityId ? `?communityId=${communityId}` : ''}`),
+  allocateParkingSlot: (id, data) => apiRequest(`/parking/${id}/allocate`, { method: 'POST', body: JSON.stringify(data) }),
+
   // Analytics
   getAnalytics: () => apiRequest('/analytics'),
 

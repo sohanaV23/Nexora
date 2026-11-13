@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { 
   Wrench, 
@@ -8,214 +8,286 @@ import {
   Phone, 
   AlertTriangle,
   Play,
-  FileCheck
+  FileCheck,
+  Building2,
+  Sparkles
 } from 'lucide-react';
 import { StatCard } from '../../components/ui/StatCard';
 import { StatusBadge } from '../../components/ui/StatusBadge';
 import { PriorityBadge } from '../../components/ui/PriorityBadge';
 import { Modal } from '../../components/ui/Modal';
-import { INITIAL_COMPLAINTS } from '../../services/mockData';
+import { api } from '../../services/api';
 import { useDemoAuth } from '../../context/DemoAuthContext';
+import { INITIAL_COMPLAINTS } from '../../services/mockData';
 
 export const WorkerDashboard = () => {
   const { t } = useTranslation();
-  const { currentUser } = useDemoAuth();
+  const { currentUser, currentCommunity } = useDemoAuth();
 
-  const [complaints, setComplaints] = useState(INITIAL_COMPLAINTS);
+  const [complaints, setComplaints] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [resolveModalOpen, setResolveModalOpen] = useState(false);
   const [activeJob, setActiveJob] = useState(null);
   const [resolutionNotes, setResolutionNotes] = useState('');
+  const [actionSuccess, setActionSuccess] = useState(null);
 
-  // Jobs assigned to Suresh Kumar
-  const myJobs = complaints.filter(c => c.assignedTo.includes('Suresh Kumar') || c.assignedTo === 'Pending Assignment');
-
-  const handleStartWork = (jobId) => {
-    setComplaints(prev => prev.map(job => {
-      if (job.id === jobId) {
-        return {
-          ...job,
-          status: 'In Progress',
-          timeline: [
-            ...job.timeline,
-            { status: 'In Progress', timestamp: 'Just now', note: `Work commenced on site by ${currentUser.name}` }
-          ]
-        };
+  const loadJobs = async () => {
+    try {
+      const res = await api.getComplaints();
+      if (res.success && res.data?.complaints?.length > 0) {
+        setComplaints(res.data.complaints.map(c => ({
+          ...c,
+          reportedBy: c.reporter?.name ? `${c.reporter.name} (${c.flat?.flatNumber || 'Flat'})` : (c.reportedBy || 'Resident'),
+          assignedTo: c.assignedWorker?.name || c.assignedTo || 'Pending Assignment'
+        })));
+      } else {
+        setComplaints(INITIAL_COMPLAINTS);
       }
-      return job;
-    }));
+    } catch (err) {
+      console.error('Failed to load technician jobs:', err);
+      setComplaints(INITIAL_COMPLAINTS);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleConfirmResolution = (e) => {
+  useEffect(() => {
+    loadJobs();
+  }, [currentCommunity]);
+
+  // Jobs assigned to Suresh Kumar or pending assignment
+  const myJobs = complaints.filter(c => {
+    const assigned = (c.assignedTo || '').toLowerCase();
+    const workerName = (c.assignedWorker?.name || '').toLowerCase();
+    const isMine = assigned.includes('suresh') || workerName.includes('suresh');
+    const isPending = assigned.includes('pending') || !c.assignedWorkerId;
+    return isMine || isPending;
+  });
+
+  const handleStartWork = async (jobId) => {
+    try {
+      if (jobId && !jobId.startsWith('CMP-2026')) {
+        await api.updateComplaintStatus(jobId, { 
+          status: 'IN_PROGRESS', 
+          note: `Work commenced on site by ${currentUser?.name || 'Suresh Kumar'}` 
+        });
+      }
+
+      setComplaints(prev => prev.map(job => {
+        if (job.id === jobId) {
+          return {
+            ...job,
+            status: 'IN_PROGRESS',
+            assignedTo: currentUser?.name || 'Suresh Kumar'
+          };
+        }
+        return job;
+      }));
+
+      setActionSuccess(`Job started. Status marked as IN PROGRESS.`);
+      setTimeout(() => setActionSuccess(null), 4000);
+    } catch (err) {
+      alert(err.message || 'Failed to update job status');
+    }
+  };
+
+  const handleConfirmResolution = async (e) => {
     e.preventDefault();
     if (!activeJob) return;
 
-    setComplaints(prev => prev.map(job => {
-      if (job.id === activeJob.id) {
-        return {
-          ...job,
-          status: 'Resolved',
-          timeline: [
-            ...job.timeline,
-            { 
-              status: 'Resolved', 
-              timestamp: 'Just now', 
-              note: `Work completed by ${currentUser.name}. Notes: ${resolutionNotes || 'Tested and fully operational'}` 
-            }
-          ]
-        };
+    try {
+      if (activeJob.id && !activeJob.id.startsWith('CMP-2026')) {
+        await api.updateComplaintStatus(activeJob.id, { 
+          status: 'RESOLVED', 
+          note: `Work completed by ${currentUser?.name || 'Suresh Kumar'}. Notes: ${resolutionNotes || 'Tested and functional'}` 
+        });
       }
-      return job;
-    }));
 
-    setResolveModalOpen(false);
-    setActiveJob(null);
-    setResolutionNotes('');
+      setComplaints(prev => prev.map(job => {
+        if (job.id === activeJob.id) {
+          return {
+            ...job,
+            status: 'RESOLVED'
+          };
+        }
+        return job;
+      }));
+
+      setActionSuccess(`Job ${activeJob.complaintNumber || activeJob.id} resolved successfully.`);
+      setResolveModalOpen(false);
+      setActiveJob(null);
+      setResolutionNotes('');
+
+      setTimeout(() => setActionSuccess(null), 4000);
+    } catch (err) {
+      alert(err.message || 'Failed to complete job');
+    }
   };
 
-  const pendingCount = myJobs.filter(j => j.status !== 'Resolved' && j.status !== 'Closed').length;
-  const completedCount = myJobs.filter(j => j.status === 'Resolved' || j.status === 'Closed').length;
+  const pendingCount = myJobs.filter(j => j.status !== 'RESOLVED' && j.status !== 'Resolved' && j.status !== 'CLOSED' && j.status !== 'Closed').length;
+  const completedCount = myJobs.filter(j => j.status === 'RESOLVED' || j.status === 'Resolved' || j.status === 'CLOSED' || j.status === 'Closed').length;
 
   return (
     <div className="space-y-6">
       {/* Worker Greeting */}
-      <div className="bg-slate-900 rounded-2xl p-6 text-white border border-slate-800 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 mb-1.5">
-            <span className="text-xs bg-amber-500/20 text-amber-300 font-semibold px-2.5 py-0.5 rounded border border-amber-500/30">
-              Staff Portal
-            </span>
-            <span className="text-xs text-slate-400">{currentUser.specialization}</span>
-          </div>
-          <h2 className="text-xl font-bold tracking-tight">Active Work Queue: {currentUser.name}</h2>
-          <p className="text-xs text-slate-400 mt-1">Review assigned jobs, verify location, and update progress timestamps.</p>
+          <h2 className="text-xl font-bold text-slate-800 tracking-tight">Technician Work Orders & Field Dispatch</h2>
+          <p className="text-xs text-slate-500">
+            Assigned maintenance tasks, SLA resolution timers, and job completion reports for {currentCommunity?.name || 'Greenwood Heights'}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="px-3 py-1.5 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-800 font-semibold text-xs flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            Technician Active: {currentUser?.name || 'Suresh Kumar'}
+          </span>
         </div>
       </div>
 
-      {/* KPI Cards */}
+      {/* Action Notification Alert */}
+      {actionSuccess && (
+        <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 flex items-center gap-3 animate-in fade-in">
+          <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+          <p className="font-semibold">{actionSuccess}</p>
+        </div>
+      )}
+
+      {/* Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard
-          title="Assigned Tasks"
+          title="Assigned Active Work Orders"
           value={pendingCount}
-          subtitle="Awaiting action"
+          subtitle="Requires on-site resolution"
           icon={Wrench}
           color="indigo"
         />
         <StatCard
-          title="Jobs In Progress"
-          value={myJobs.filter(j => j.status === 'In Progress').length}
-          subtitle="Currently active"
-          icon={Clock}
-          color="amber"
-        />
-        <StatCard
-          title="Completed This Week"
+          title="Jobs Resolved & Closed"
           value={completedCount}
-          subtitle="Verified by residents"
+          subtitle="Signed off this month"
           icon={CheckCircle2}
           color="emerald"
         />
+        <StatCard
+          title="Target SLA Turnaround"
+          value="< 4.0 Hours"
+          subtitle="Zero SLA breaches this week"
+          icon={Clock}
+          color="sky"
+        />
       </div>
 
-      {/* Assigned Tasks Cards */}
+      {/* Jobs List */}
       <div className="space-y-4">
-        <h3 className="text-base font-bold text-slate-800">Assigned Maintenance Tasks</h3>
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
+            My Service Tickets ({myJobs.length})
+          </h3>
+          <span className="text-xs text-slate-400">Ordered by priority level</span>
+        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {myJobs.map((job) => (
-            <div key={job.id} className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-2xs space-y-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-indigo-600">{job.id}</span>
-                    <span className="text-xs text-slate-400">• {job.category}</span>
+          {myJobs.map((job) => {
+            const isResolved = job.status === 'RESOLVED' || job.status === 'Resolved';
+            const isInProgress = job.status === 'IN_PROGRESS' || job.status === 'In Progress';
+            const isAssigned = job.status === 'ASSIGNED' || job.status === 'Assigned' || job.status === 'SUBMITTED' || job.status === 'Submitted';
+
+            return (
+              <div
+                key={job.id}
+                className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-2xs hover:shadow-xs transition-all space-y-4 flex flex-col justify-between"
+              >
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono font-bold text-xs text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded">
+                      {job.complaintNumber || job.id}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <PriorityBadge priority={job.priority} />
+                      <StatusBadge status={job.status} />
+                    </div>
                   </div>
-                  <h4 className="text-sm font-bold text-slate-800 mt-1">{job.title}</h4>
+
+                  <div>
+                    <h4 className="text-base font-bold text-slate-800 leading-snug">{job.title}</h4>
+                    <p className="text-xs text-slate-600 mt-1 line-clamp-2">{job.description}</p>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-100 space-y-1 text-xs text-slate-500">
+                    <div className="flex items-center gap-1.5 text-slate-700 font-medium">
+                      <MapPin className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                      <span>{job.location}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-slate-400">
+                      <span>Category: <strong>{job.category}</strong></span>
+                      <span>Reporter: {job.reportedBy}</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex flex-col items-end gap-1 shrink-0">
-                  <StatusBadge status={job.status} />
-                  <PriorityBadge priority={job.priority} />
+
+                {/* Worker Action Buttons */}
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                  {isAssigned && (
+                    <button
+                      onClick={() => handleStartWork(job.id)}
+                      className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs transition-colors shadow-2xs flex items-center gap-1.5"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-current" />
+                      <span>Start On-Site Inspection</span>
+                    </button>
+                  )}
+
+                  {isInProgress && (
+                    <button
+                      onClick={() => {
+                        setActiveJob(job);
+                        setResolveModalOpen(true);
+                      }}
+                      className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs transition-colors shadow-2xs flex items-center gap-1.5"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Sign Off as Resolved</span>
+                    </button>
+                  )}
+
+                  {isResolved && (
+                    <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
+                      <CheckCircle2 className="w-4 h-4" /> Work Complete
+                    </span>
+                  )}
                 </div>
               </div>
-
-              <p className="text-xs text-slate-600 leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-100">
-                {job.description}
-              </p>
-
-              <div className="space-y-1.5 text-xs text-slate-600">
-                <div className="flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
-                  <span className="font-medium text-slate-800">{job.location}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Phone className="w-4 h-4 text-slate-400 shrink-0" />
-                  <span>Reported by: <strong className="text-slate-800">{job.reportedBy}</strong></span>
-                </div>
-                <div className="flex items-center gap-2 text-indigo-600 font-medium">
-                  <Clock className="w-4 h-4 shrink-0" />
-                  <span>SLA Resolution Target: {job.slaTargetHours} Hours</span>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
-                {job.status === 'Assigned' && (
-                  <button
-                    onClick={() => handleStartWork(job.id)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-semibold text-xs shadow-2xs transition-colors"
-                  >
-                    <Play className="w-3.5 h-3.5 fill-current" />
-                    <span>Start Work</span>
-                  </button>
-                )}
-                {job.status === 'In Progress' && (
-                  <button
-                    onClick={() => {
-                      setActiveJob(job);
-                      setResolveModalOpen(true);
-                    }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-2xs transition-colors"
-                  >
-                    <FileCheck className="w-3.5 h-3.5" />
-                    <span>Complete & Mark Resolved</span>
-                  </button>
-                )}
-                {job.status === 'Resolved' && (
-                  <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Resolution Recorded</span>
-                  </span>
-                )}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
-      {/* Resolution Confirmation Modal */}
+      {/* Resolve Confirmation Modal */}
       {resolveModalOpen && activeJob && (
         <Modal
           isOpen={resolveModalOpen}
           onClose={() => setResolveModalOpen(false)}
-          title={`Record Job Resolution — ${activeJob.id}`}
+          title={`Complete Job — ${activeJob.complaintNumber || activeJob.id}`}
           maxWidth="max-w-md"
         >
           <form onSubmit={handleConfirmResolution} className="space-y-4">
             <div>
-              <p className="text-xs text-slate-400 uppercase font-semibold">Issue Title</p>
-              <p className="text-sm font-semibold text-slate-800 mt-0.5">{activeJob.title}</p>
-              <p className="text-xs text-slate-500">{activeJob.location}</p>
+              <p className="text-xs text-slate-500 mb-1">Issue</p>
+              <p className="text-sm font-semibold text-slate-800">{activeJob.title}</p>
+              <p className="text-xs text-slate-500 mt-1">{activeJob.location}</p>
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                Technician Resolution Notes *
+                Technician Work Notes & Parts Replaced *
               </label>
               <textarea
                 required
                 rows={3}
                 value={resolutionNotes}
                 onChange={(e) => setResolutionNotes(e.target.value)}
-                placeholder="Explain the fix applied (e.g. replaced worn rubber washer, tested water pressure for 10 mins)..."
+                placeholder="e.g. Tightened overhead flange valve, replaced Teflon seal gasket, zero leaks observed under pressure."
                 className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
               />
             </div>
@@ -232,7 +304,7 @@ export const WorkerDashboard = () => {
                 type="submit"
                 className="px-5 py-2 rounded-xl bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 shadow-sm"
               >
-                Confirm Resolution
+                Verify & Close Ticket
               </button>
             </div>
           </form>

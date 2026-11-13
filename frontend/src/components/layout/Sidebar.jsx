@@ -16,14 +16,15 @@ import {
   Sparkles,
   Key,
   Crown,
-  Activity
+  Activity,
+  LogOut
 } from 'lucide-react';
 import { useDemoAuth } from '../../context/DemoAuthContext';
 import clsx from 'clsx';
 
 export const Sidebar = ({ isOpen, onClose }) => {
   const { t } = useTranslation();
-  const { currentRole, currentCommunity } = useDemoAuth();
+  const { currentRole, currentCommunity, logout } = useDemoAuth();
 
   // Role-appropriate navigation items
   const navItems = [
@@ -116,8 +117,8 @@ export const Sidebar = ({ isOpen, onClose }) => {
           })}
         </nav>
 
-        {/* Role Pill Footer */}
-        <div className="p-4 border-t border-slate-800/80 bg-slate-950/60">
+        {/* Role Pill Footer & Logout */}
+        <div className="p-4 border-t border-slate-800/80 bg-slate-950/60 space-y-2.5">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-bold text-indigo-400 uppercase">
               {currentRole.slice(0, 2)}
@@ -127,8 +128,17 @@ export const Sidebar = ({ isOpen, onClose }) => {
               <p className="text-[11px] text-slate-400 truncate">Server Verified Session</p>
             </div>
           </div>
+
+          <button
+            onClick={() => logout()}
+            className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-slate-800/80 hover:bg-rose-500/20 hover:text-rose-300 text-xs font-semibold text-slate-300 transition-colors border border-slate-700/60 cursor-pointer"
+          >
+            <LogOut className="w-3.5 h-3.5 text-rose-400" />
+            <span>Sign Out / Switch Role</span>
+          </button>
         </div>
       </aside>
     </>
   );
 };
+

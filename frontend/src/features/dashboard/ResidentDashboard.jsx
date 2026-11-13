@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { 
   AlertCircle, 
@@ -16,14 +16,17 @@ import { StatCard } from '../../components/ui/StatCard';
 import { StatusBadge } from '../../components/ui/StatusBadge';
 import { PriorityBadge } from '../../components/ui/PriorityBadge';
 import { Modal } from '../../components/ui/Modal';
+import { api } from '../../services/api';
 import { INITIAL_COMPLAINTS, INITIAL_NOTICES, INITIAL_VISITORS, INITIAL_DUES } from '../../services/mockData';
 import { useDemoAuth } from '../../context/DemoAuthContext';
 
 export const ResidentDashboard = () => {
   const { t } = useTranslation();
-  const { currentUser } = useDemoAuth();
+  const { currentUser, currentCommunity } = useDemoAuth();
 
-  const [complaints, setComplaints] = useState(INITIAL_COMPLAINTS);
+  const [complaints, setComplaints] = useState([]);
+  const [invoices, setInvoices] = useState([]);
+  const [noticesCount, setNoticesCount] = useState(INITIAL_NOTICES.length);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedComplaint, setSelectedComplaint] = useState(null);
 
@@ -33,7 +36,7 @@ export const ResidentDashboard = () => {
     description: '',
     category: 'Plumbing & Water',
     location: currentUser.flat || 'Tower B - Flat 402',
-    priority: 'Medium'
+    priority: 'MEDIUM'
   });
 
   // ML Category suggestion simulation state
@@ -41,13 +44,48 @@ export const ResidentDashboard = () => {
   const [aiSuggestion, setAiSuggestion] = useState(null);
   const [duplicateWarning, setDuplicateWarning] = useState(null);
 
+  const loadData = async () => {
+    try {
+      const [cmpRes, invRes, notRes] = await Promise.all([
+        api.getComplaints(),
+        api.getInvoices(),
+        api.getNotices()
+      ]);
+
+      if (cmpRes.success && cmpRes.data?.complaints?.length > 0) {
+        setComplaints(cmpRes.data.complaints.map(c => ({
+          ...c,
+          reportedBy: c.reporter?.name ? `${c.reporter.name} (${c.flat?.flatNumber || 'Flat'})` : (c.reportedBy || 'Resident'),
+          assignedTo: c.assignedWorker?.name || c.assignedTo || 'Pending Assignment'
+        })));
+      } else {
+        setComplaints(INITIAL_COMPLAINTS);
+      }
+
+      if (invRes.success && invRes.data?.invoices) {
+        setInvoices(invRes.data.invoices);
+      }
+
+      if (notRes.success && notRes.data?.notices) {
+        setNoticesCount(notRes.data.notices.length);
+      }
+    } catch (err) {
+      console.error('Failed to load resident data:', err);
+      setComplaints(INITIAL_COMPLAINTS);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, [currentCommunity]);
+
   // Local helper for AI category suggestion demo
   const handleAiSuggest = () => {
     if (!formData.title && !formData.description) return;
     setIsAiLoading(true);
     setTimeout(() => {
       const text = (formData.title + ' ' + formData.description).toLowerCase();
-      let suggested = 'Other';
+      let suggested = 'Plumbing & Water';
       let confidence = 0.88;
 
       if (text.includes('water') || text.includes('leak') || text.includes('tap') || text.includes('pipe') || text.includes('flush')) {
@@ -84,45 +122,68 @@ export const ResidentDashboard = () => {
     }, 600);
   };
 
-  const handleCreateComplaint = (e) => {
+  const handleCreateComplaint = async (e) => {
     e.preventDefault();
-    const newId = `CMP-2026-00${complaints.length + 1}`;
-    const newEntry = {
-      id: newId,
-      communityId: 'comm-1',
-      title: formData.title,
-      description: formData.description,
-      category: formData.category,
-      location: formData.location,
-      priority: formData.priority,
-      status: 'Submitted',
-      reportedBy: `${currentUser.name} (${currentUser.flat})`,
-      assignedTo: 'Pending Assignment',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      slaTargetHours: formData.priority === 'Urgent' ? 4 : formData.priority === 'High' ? 8 : 24,
-      isOverdue: false,
-      confidenceScore: aiSuggestion ? aiSuggestion.confidence / 100 : 0.90,
-      timeline: [
-        { status: 'Submitted', timestamp: 'Just now', note: 'Complaint logged by resident' }
-      ]
-    };
+    try {
+      const res = await api.createComplaint({
+        title: formData.title,
+        description: formData.description,
+        category: formData.category,
+        location: formData.location || currentUser.flat || 'Tower B - Flat 402',
+        priority: formData.priority?.toUpperCase() || 'MEDIUM',
+        confidenceScore: aiSuggestion ? aiSuggestion.confidence / 100 : 0.92,
+        mlSuggestedCategory: aiSuggestion ? aiSuggestion.category : formData.category,
+        duplicateWarningRef: duplicateWarning ? duplicateWarning.matchId : null
+      });
 
-    setComplaints([newEntry, ...complaints]);
-    setIsModalOpen(false);
-    setFormData({
-      title: '',
-      description: '',
-      category: 'Plumbing & Water',
-      location: currentUser.flat || 'Tower B - Flat 402',
-      priority: 'Medium'
-    });
-    setAiSuggestion(null);
-    setDuplicateWarning(null);
+      const newEntry = res.success && res.data?.complaint ? {
+        ...res.data.complaint,
+        reportedBy: `${currentUser.name} (${currentUser.flat || 'B-402'})`,
+        assignedTo: 'Pending Assignment'
+      } : {
+        id: `CMP-2026-00${complaints.length + 1}`,
+        communityId: 'comm-1',
+        title: formData.title,
+        description: formData.description,
+        category: formData.category,
+        location: formData.location,
+        priority: formData.priority,
+        status: 'Submitted',
+        reportedBy: `${currentUser.name} (${currentUser.flat})`,
+        assignedTo: 'Pending Assignment',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        slaTargetHours: formData.priority === 'Urgent' ? 4 : formData.priority === 'High' ? 8 : 24,
+        isOverdue: false,
+        confidenceScore: aiSuggestion ? aiSuggestion.confidence / 100 : 0.90,
+        timeline: [
+          { status: 'Submitted', timestamp: 'Just now', note: 'Complaint logged by resident' }
+        ]
+      };
+
+      setComplaints([newEntry, ...complaints]);
+      setIsModalOpen(false);
+      setFormData({
+        title: '',
+        description: '',
+        category: 'Plumbing & Water',
+        location: currentUser.flat || 'Tower B - Flat 402',
+        priority: 'MEDIUM'
+      });
+      setAiSuggestion(null);
+      setDuplicateWarning(null);
+    } catch (err) {
+      alert(err.message || 'Failed to submit complaint');
+    }
   };
 
-  const myComplaints = complaints.filter(c => c.reportedBy.includes(currentUser.name) || c.reportedBy.includes('B-402'));
-  const openCount = myComplaints.filter(c => c.status !== 'Resolved' && c.status !== 'Closed').length;
+  const myComplaints = complaints.filter(c => 
+    (c.reportedBy || '').includes(currentUser?.name || '') || 
+    (c.reportedBy || '').includes('B-402') || 
+    (c.reportedBy || '').includes('204')
+  );
+  const openCount = myComplaints.filter(c => c.status !== 'RESOLVED' && c.status !== 'Resolved' && c.status !== 'CLOSED' && c.status !== 'Closed').length;
+
 
   return (
     <div className="space-y-6">
@@ -178,8 +239,8 @@ export const ResidentDashboard = () => {
         />
         <StatCard
           title="Community Notices"
-          value={INITIAL_NOTICES.length}
-          subtitle="2 unread announcements"
+          value={noticesCount}
+          subtitle="Active community announcements"
           icon={Bell}
           color="sky"
         />
