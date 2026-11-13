@@ -6,7 +6,7 @@ const rateLimit = require('express-rate-limit');
 const apiRoutes = require('./routes/api');
 
 const app = express();
-
+app.set('trust proxy', 1);
 // Security Headers
 app.use(helmet());
 
